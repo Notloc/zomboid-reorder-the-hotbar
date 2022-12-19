@@ -1,12 +1,48 @@
 require "ISUI/ISHotbar"
 
--- I hate completely replacing functions, but I had to fix a section in the middle. See line 83.
-ISHotbar.refresh = function(self)
-	self.needsRefresh = false
+ReorderTheHotbar_Mod = {}
 
-	-- the clothingUpdate is called quite often, we check if we changed any clothing to be sure we need to refresh
-	-- as it can be called also when adding blood/holes..
-	local refresh = false;
+local SORT_KEY_PREFIX = "RTH_index"
+local LOCK_KEY = "RTH_locked"
+
+local DEFAULT_INDEXES = {
+    ["Back"] = 1,
+    ["SmallBeltLeft"] = 2,
+    ["SmallBeltRight"] = 3,
+    ["HolsterLeft"] = 4,
+    ["HolsterRight"] = 5,
+}
+
+local LOCK_TEX = getTexture("media/ui/ReorderTheHotbar/locked.png")
+local UNLOCK_TEX = getTexture("media/ui/ReorderTheHotbar/unlocked.png")
+local FONT_HGT_SMALL = getTextManager():getFontHeight(UIFont.Small)
+
+
+local getIndexKey = function(slot)
+    return slot.slotType..SORT_KEY_PREFIX
+end
+
+ReorderTheHotbar_Mod.getPreferredIndexes = function(player, slots)
+    local playerModData = player:getModData()
+    local preferredIndexes = {}
+    for i=1, #slots do
+        local slot = slots[i]
+        local index = playerModData[getIndexKey(slot)] or DEFAULT_INDEXES[slot.slotType] or i
+        preferredIndexes[slot] = index
+    end
+    return preferredIndexes
+end
+
+ISHotbar.pre_reorder_refresh = ISHotbar.refresh
+ISHotbar.refresh = function(self)
+    self:refreshWithoutCryingAboutTheReorder()
+    self:pre_reorder_refresh()
+    self:reorderTheHotbar()
+end
+
+-- Basically run refresh twice, once to handle the reorder case without bugs, and once to actually refresh the hotbar and let other mods do their thing
+ISHotbar.refreshWithoutCryingAboutTheReorder = function(self)
+    local refresh = false;
 
 	if not self.wornItems then
 		self.wornItems = {};
@@ -117,11 +153,10 @@ ISHotbar.refresh = function(self)
 	end
 	
 	self.availableSlot = newSlots;
-	
-	-- we re attach out items, if we added a bag for example, we need to redo the correct attachment
+
+    -- we re attach out items, if we added a bag for example, we need to redo the correct attachment
 	for i, item in pairs(self.attachedItems) do
-        local slotI = item:getAttachedSlot();
-		local slot = self.availableSlot[slotI];
+		local slot = self.availableSlot[item:getAttachedSlot()];
 		local slotDef = slot.def;
 		local slotIndex = item:getAttachedSlot();
 		self:removeItem(item, false);
@@ -136,46 +171,8 @@ ISHotbar.refresh = function(self)
 	self:setWidth(width + 10);
 
 	self:reloadIcons();
-end
 
-
-ReorderTheHotbar_Mod = {}
-
-local SORT_KEY_PREFIX = "RTH_index"
-local LOCK_KEY = "RTH_locked"
-
-local DEFAULT_INDEXES = {
-    ["Back"] = 1,
-    ["SmallBeltLeft"] = 2,
-    ["SmallBeltRight"] = 3,
-    ["HolsterLeft"] = 4,
-    ["HolsterRight"] = 5,
-}
-
-local LOCK_TEX = getTexture("media/ui/ReorderTheHotbar/locked.png")
-local UNLOCK_TEX = getTexture("media/ui/ReorderTheHotbar/unlocked.png")
-local FONT_HGT_SMALL = getTextManager():getFontHeight(UIFont.Small)
-
-
-local getIndexKey = function(slot)
-    return slot.slotType..SORT_KEY_PREFIX
-end
-
-ReorderTheHotbar_Mod.getPreferredIndexes = function(player, slots)
-    local playerModData = player:getModData()
-    local preferredIndexes = {}
-    for i=1, #slots do
-        local slot = slots[i]
-        local index = playerModData[getIndexKey(slot)] or DEFAULT_INDEXES[slot.slotType] or i
-        preferredIndexes[slot] = index
-    end
-    return preferredIndexes
-end
-
-ISHotbar.pre_reorder_refresh = ISHotbar.refresh
-ISHotbar.refresh = function(self)
-    self:pre_reorder_refresh()
-    self:reorderTheHotbar()
+    self.wornItems = {} -- Ensures the real call to refresh will run
 end
 
 ISHotbar.reorderTheHotbar = function(self)
@@ -226,12 +223,28 @@ ISHotbar.onMouseMove = function(self, _, __)
     end
 end
 
+-- To 20 for Noir's mod
 local indexToHotkey = function(index)
     if index == 1 then return getCore():getKey("Hotbar 1") end
     if index == 2 then return getCore():getKey("Hotbar 2") end
     if index == 3 then return getCore():getKey("Hotbar 3") end
     if index == 4 then return getCore():getKey("Hotbar 4") end
     if index == 5 then return getCore():getKey("Hotbar 5") end
+    if index == 6 then return getCore():getKey("Hotbar 6") end
+    if index == 7 then return getCore():getKey("Hotbar 7") end
+    if index == 8 then return getCore():getKey("Hotbar 8") end
+    if index == 9 then return getCore():getKey("Hotbar 9") end
+    if index == 10 then return getCore():getKey("Hotbar 10") end
+    if index == 11 then return getCore():getKey("Hotbar 11") end
+    if index == 12 then return getCore():getKey("Hotbar 12") end
+    if index == 13 then return getCore():getKey("Hotbar 13") end
+    if index == 14 then return getCore():getKey("Hotbar 14") end
+    if index == 15 then return getCore():getKey("Hotbar 15") end
+    if index == 16 then return getCore():getKey("Hotbar 16") end
+    if index == 17 then return getCore():getKey("Hotbar 17") end
+    if index == 18 then return getCore():getKey("Hotbar 18") end
+    if index == 19 then return getCore():getKey("Hotbar 19") end
+    if index == 20 then return getCore():getKey("Hotbar 20") end
     return -1
 end
 
@@ -317,7 +330,6 @@ ISHotbar.reorder_render = function(self)
     end
 end
 
--- Another full override, messy mod is messy :(
 ISHotbar.getSlotIndexAt = function(self, x, y)
 	if x >= 0 and x < self.width and y >= 0 and y < self.height then
 		local index = math.floor((x - self.margins) / (self.slotWidth + self.slotPad)) + 1
@@ -342,7 +354,7 @@ ISHotbar.loadPosition = function(self)
 end
 
 -- Wait for the load event so we can avoid conflicts with mods that override the ISHotbar rendering.
--- The nature of the rendering code means a full override is required, so we'll ensure we load last to avoid losing our changes.
+-- The nature of the rendering code means a full override is likely, so we'll ensure we load last to avoid losing our changes.
 local function OnLoad()
 	ReorderTheHotbar_Mod.original_hotbar_render = ISHotbar.render
     ISHotbar.render = ISHotbar.reorder_render
