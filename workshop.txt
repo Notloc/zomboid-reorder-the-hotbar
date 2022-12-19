@@ -1,0 +1,18 @@
+version=1
+id=2903771337
+title=Reorder The Hotbar
+description=[b]Reorder The Hotbar[/b] is a mod that allows you to customize the order of the items in your hotbar.
+description=
+description=Simply drag and drop the hotbar slots to rearrange them to your liking.
+description=This mod also adds the ability to click on the hotbar slots as an alternative to pressing the hotkeys.
+description=
+description=[img]https://i.imgur.com/p7Fv1Z6.gif[/img]
+description=
+description=[h3]If you enjoy my mods, consider supporting me on Ko-fi![/h3]
+description=[url=https://ko-fi.com/notloc][img]https://i.imgur.com/jLt3Dyv.png[/img][/url]
+description=Or, just come check out some previews of what I'm working on next!
+description=
+description=[h1]Other Mods To Check Out![/h1]
+description=[url=https://steamcommunity.com/sharedfiles/filedetails/?id=2808679062][img]https://i.imgur.com/tDcAzoR.png[/img][/url] [url=https://steamcommunity.com/sharedfiles/filedetails/?id=2804531012][img]https://i.imgur.com/RD0EbXR.png[/img][/url] [url=https://steamcommunity.com/sharedfiles/filedetails/?id=2807001835][img]https://i.imgur.com/4VOnwu4.png[/img][/url]
+tags=Build 41;Interface;Misc;Multiplayer
+visibility=public
