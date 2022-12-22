@@ -4,22 +4,22 @@ ReorderTheHotbar_Mod = {}
 
 local SORT_KEY_PREFIX = "RTH_index"
 local LOCK_KEY = "RTH_locked"
-
-local DEFAULT_INDEXES = {
-    ["Back"] = 1,
-    ["SmallBeltLeft"] = 2,
-    ["SmallBeltRight"] = 3,
-    ["HolsterLeft"] = 4,
-    ["HolsterRight"] = 5,
-}
+local SWAP_INSERT_KEY = "RTH_swap"
 
 local LOCK_TEX = getTexture("media/ui/ReorderTheHotbar/locked.png")
 local UNLOCK_TEX = getTexture("media/ui/ReorderTheHotbar/unlocked.png")
-local FONT_HGT_SMALL = getTextManager():getFontHeight(UIFont.Small)
 
+local INSERT_TEX = getTexture("media/ui/ReorderTheHotbar/insert.png")
+local SWAP_TEX = getTexture("media/ui/ReorderTheHotbar/swap.png")
+
+local FONT_HGT_SMALL = getTextManager():getFontHeight(UIFont.Small)
 
 local getSlotKey = function(slot)
     return slot.slotType..SORT_KEY_PREFIX
+end
+
+local getSlotTypeKey = function(slotType)
+    return slotType..SORT_KEY_PREFIX
 end
 
 ReorderTheHotbar_Mod.getPreferredIndexes = function(player, slots)
@@ -27,7 +27,7 @@ ReorderTheHotbar_Mod.getPreferredIndexes = function(player, slots)
     local preferredIndexes = {}
     for i=1, #slots do
         local slot = slots[i]
-        local index = playerModData[getSlotKey(slot)] or DEFAULT_INDEXES[slot.slotType] or i
+        local index = playerModData[getSlotKey(slot)] or i
         preferredIndexes[slot] = index
     end
     return preferredIndexes
@@ -35,11 +35,10 @@ end
 
 ISHotbar.pre_reorder_refresh = ISHotbar.refresh
 ISHotbar.refresh = function(self)
-    if NATTBackpacks and not self.skippedOneForNATT then -- I hate doing this kinda thing, but its fairly harmless as far as compatibility workarounds go
-        -- But in general, I'd rather my mods not know that other mods exist
+    if not self.skippedOne then
         self:pre_reorder_refresh()
         self.needsRefresh = true
-        self.skippedOneForNATT = true
+        self.skippedOne = true
     else
         self:sortSlotsThatAreAboutToBeRemovedToTheBack()
         self:pre_reorder_refresh()
@@ -68,6 +67,8 @@ ISHotbar.sortSlotsThatAreAboutToBeRemovedToTheBack = function(self)
 	local slotDef = self:getSlotDef("Back");
     availableSlotTypes[slotDef.type] = true
 
+    local availableTypeCount = 1
+
 	for i=0, self.chr:getWornItems():size()-1 do
 		local item = self.chr:getWornItems():getItemByIndex(i);
 
@@ -81,6 +82,7 @@ ISHotbar.sortSlotsThatAreAboutToBeRemovedToTheBack = function(self)
 				local slotDef = self:getSlotDef(item:getAttachmentsProvided():get(j));
 				if slotDef then
 					availableSlotTypes[slotDef.type] = true
+                    availableTypeCount = availableTypeCount + 1
 				end
 			end
 		end
@@ -113,26 +115,45 @@ ISHotbar.sortSlotsThatAreAboutToBeRemovedToTheBack = function(self)
         end
     end
 
+    if availableTypeCount > #self.availableSlot then
+        -- remove the types that are already in the list
+        for index, slot in ipairs(self.availableSlot) do
+            availableSlotTypes[slot.slotType] = nil
+        end
+
+        -- reset the index of the new slots
+        local modData = self.character:getModData()
+        for slotType, _ in pairs(availableSlotTypes) do
+            modData[getSlotTypeKey(slotType)] = nil
+        end
+
+    end
+
     self.availableSlot = newSlots
     self.attachedItems = newItems
 
     self.wornItems = nil -- Ensures the real call to refresh will run
 end
 
-ISHotbar.reorderTheHotbar = function(self)
-    local preferredIndexes = ReorderTheHotbar_Mod.getPreferredIndexes(self.character, self.availableSlot)
-
-    -- Map the items to the slots
+local function mapItemsToSlots(self)
     local items = self.attachedItems or {}
     for i=1, #self.availableSlot do
         self.availableSlot[i].item = items[i]
     end
+end
 
-    -- Reorder the slots
+local function sortSlots(self)
+    local preferredIndexes = ReorderTheHotbar_Mod.getPreferredIndexes(self.character, self.availableSlot)
     table.sort(self.availableSlot, function(a, b)
         return preferredIndexes[a] < preferredIndexes[b]
     end)
-    
+end
+
+ISHotbar.reorderTheHotbar = function(self)
+    -- Reorder the slots before the items are attached the first time to properly load the items
+    sortSlots(self)
+    mapItemsToSlots(self)
+
     -- Update the items
     self.attachedItems = {}
     for i=1, #self.availableSlot do
@@ -155,7 +176,7 @@ end
 -- It would open the right click menu on the wrong slot because it doesn't take into account each slot's padding
 ISHotbar.onRightMouseUp = function(self, x, y)
 	local clickedSlot = self:getSlotIndexAt(x, y)
-    if clickedSlot ~= -1 then
+    if self.availableSlot[clickedSlot] then
         self:doMenu(clickedSlot);
     end
 end
@@ -184,7 +205,7 @@ ISHotbar.onMouseMove = function(self, _, __)
     end
 end
 
--- To 20 for Noir's mod
+-- To 30 because why not
 local indexToHotkey = function(index)
     if index == 1 then return getCore():getKey("Hotbar 1") end
     if index == 2 then return getCore():getKey("Hotbar 2") end
@@ -206,7 +227,84 @@ local indexToHotkey = function(index)
     if index == 18 then return getCore():getKey("Hotbar 18") end
     if index == 19 then return getCore():getKey("Hotbar 19") end
     if index == 20 then return getCore():getKey("Hotbar 20") end
+    if index == 21 then return getCore():getKey("Hotbar 21") end
+    if index == 22 then return getCore():getKey("Hotbar 22") end
+    if index == 23 then return getCore():getKey("Hotbar 23") end
+    if index == 24 then return getCore():getKey("Hotbar 24") end
+    if index == 25 then return getCore():getKey("Hotbar 25") end
+    if index == 26 then return getCore():getKey("Hotbar 26") end
+    if index == 27 then return getCore():getKey("Hotbar 27") end
+    if index == 28 then return getCore():getKey("Hotbar 28") end
+    if index == 29 then return getCore():getKey("Hotbar 29") end
+    if index == 30 then return getCore():getKey("Hotbar 30") end
     return -1
+end
+
+local function swapSlots(self, index1, index2)
+    local playerModData = self.character:getModData()
+
+    local slot1 = self.availableSlot[index1]
+    local slot2 = self.availableSlot[index2]
+    
+    playerModData[getSlotKey(slot1)] = index2
+    playerModData[getSlotKey(slot2)] = index1
+
+    self.availableSlot[index2] = slot1
+    self.attachedItems[index2] = slot1.item
+    if slot1.item then
+        slot1.item:setAttachedSlot(index2)
+    end
+    
+    self.availableSlot[index1] = slot2
+    self.attachedItems[index1] = slot2.item
+    if slot2.item then
+        slot2.item:setAttachedSlot(index1)
+    end
+
+    self.wornItems = nil
+    self:refresh()
+end
+
+local function insertSlot(self, oldIndex, newIndex)
+    if oldIndex == newIndex then return end  
+
+    local playerModData = self.character:getModData()
+    local targetSlot = self.availableSlot[oldIndex]
+    
+    -- If the new index is lower than the old index, we need to move all the indexes up
+    if newIndex < oldIndex then
+        for i=oldIndex-1, newIndex, -1 do
+            local slot = self.availableSlot[i]
+            playerModData[getSlotKey(slot)] = i+1
+            self.availableSlot[i+1] = slot
+            self.attachedItems[i+1] = slot.item
+            if slot.item then
+                slot.item:setAttachedSlot(i+1)
+            end
+        end
+  
+    -- If the new index is higher than the old index, we need to move all the indexes down
+    else
+        for i=oldIndex+1, newIndex do
+            local slot = self.availableSlot[i]
+            playerModData[getSlotKey(slot)] = i-1
+            self.availableSlot[i-1] = slot
+            self.attachedItems[i-1] = slot.item
+            if slot.item then
+                slot.item:setAttachedSlot(i-1)
+            end
+        end
+    end
+
+    playerModData[getSlotKey(targetSlot)] = newIndex
+    self.availableSlot[newIndex] = targetSlot
+    self.attachedItems[newIndex] = targetSlot.item
+    if targetSlot.item then
+        targetSlot.item:setAttachedSlot(newIndex)
+    end
+
+    self.wornItems = nil
+    self:refresh()
 end
 
 ISHotbar.pre_reorder_onMouseUp = ISHotbar.onMouseUp
@@ -221,29 +319,31 @@ ISHotbar.onMouseUp = function(self, x, y)
     if self.isDraggingASlot then
         if index ~= -1 and index ~= self.draggingSlotIndex then
             local playerModData = self.character:getModData()
-
-            local draggedSlot = self.availableSlot[self.draggingSlotIndex]
-            local droppedSlot = self.availableSlot[index]
-
-            playerModData[getSlotKey(draggedSlot)] = index
-            playerModData[getSlotKey(droppedSlot)] = self.draggingSlotIndex
-
-            self.wornItems = nil
-            self:refresh()
-            self:savePosition()
+            if playerModData[SWAP_INSERT_KEY] then
+                insertSlot(self, self.draggingSlotIndex, index)
+            else
+                swapSlots(self, self.draggingSlotIndex, index)
+            end
         end
     elseif index > -1 and getTimestampMs() - (self.lastClickTime or 0) < 150 then   
         local key = indexToHotkey(index)
-        self.onKeyStartPressed(key)
-        self.onKeyPressed(key)
+        if key then
+            self.onKeyStartPressed(key)
+            self.onKeyPressed(key)
+        end
     else
-        -- Check if we clicked the lock icon
+        -- Check if we clicked the custom buttons
         local slotCount = #self.availableSlot
-        local lockIconX = self.margins + (self.slotWidth + self.slotPad) * slotCount
-        if x > lockIconX and x < lockIconX + 18 and y > 0 and y < 18 then
+        local buttonsX = self.margins + (self.slotWidth + self.slotPad) * slotCount
+        if x > buttonsX and x < buttonsX + 18 then
             local playerModData = self.character:getModData()
-            playerModData[LOCK_KEY] = not playerModData[LOCK_KEY]
-            getSoundManager():playUISound("UIToggleTickBox")
+            if y > 0 and y < 18 then
+                playerModData[LOCK_KEY] = not playerModData[LOCK_KEY]
+                getSoundManager():playUISound("UIToggleTickBox")
+            elseif y > 18 and y < 36 then
+                playerModData[SWAP_INSERT_KEY] = not playerModData[SWAP_INSERT_KEY]
+                getSoundManager():playUISound("UIToggleTickBox")
+            end
         end
     end
 
@@ -259,17 +359,22 @@ end
 
 ISHotbar.reorder_render = function(self)
     ReorderTheHotbar_Mod.original_hotbar_render(self)
+    local playerModData = self.character:getModData()
     
-    -- Render a lock icon at the edge of the hotbar
     local slotCount = #self.availableSlot
     local x = self.margins + (self.slotWidth + self.slotPad) * slotCount
-
+    
+    -- Render a lock icon at the edge of the hotbar
     self:drawRect(x, 0, 18, 18, 0.8, 0, 0, 0);
     self:drawRectBorderStatic(x, 0, 18, 18, self.borderColor.a, self.borderColor.r, self.borderColor.g, self.borderColor.b);
-    
-    local playerModData = self.character:getModData()
-    local texture = playerModData[LOCK_KEY] and LOCK_TEX or UNLOCK_TEX
-    self:drawTexture(texture, x+1, 1, 1, 1, 1, 1)
+    local lockTex = playerModData[LOCK_KEY] and LOCK_TEX or UNLOCK_TEX
+    self:drawTexture(lockTex, x+1, 1, 1, 1, 1, 1)
+
+    -- Render the swap/insert icon
+    self:drawRect(x, 18, 18, 18, 0.8, 0, 0, 0)
+    self:drawRectBorderStatic(x, 18, 18, 18, self.borderColor.a, self.borderColor.r, self.borderColor.g, self.borderColor.b);
+    local swapTex = playerModData[SWAP_INSERT_KEY] and INSERT_TEX or SWAP_TEX
+    self:drawTexture(swapTex, x+1, 19, 1, 1, 1, 1)
 
     if self.isDraggingASlot then
         -- Render the slot being dragged under the mouse
