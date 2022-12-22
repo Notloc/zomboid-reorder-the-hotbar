@@ -172,15 +172,24 @@ ISHotbar.reorderTheHotbar = function(self)
     end
 end
 
--- Full overriding this one because I need to remove its custom way of determining the slot index
--- It would open the right click menu on the wrong slot because it doesn't take into account each slot's padding
+local og_onRightMouseUp = ISHotbar.onRightMouseUp
 ISHotbar.onRightMouseUp = function(self, x, y)
-	local clickedSlot = self:getSlotIndexAt(x, y)
-    if self.availableSlot[clickedSlot] then
-        self:doMenu(clickedSlot);
-    end
+    self.reorderRightMouseUp = true
+    og_onRightMouseUp(self, x, y)
+    self.reorderRightMouseUp = false
 end
 
+local og_doMenu = ISHotbar.doMenu
+ISHotbar.doMenu = function(self, slotIndex)
+    if self.reorderRightMouseUp then
+        -- Fix the slot index
+        local fixedIndex = self:getSlotIndexAt(self:getMouseX(), self:getMouseY())
+        if fixedIndex > 0 and fixedIndex <= #self.availableSlot then
+            slotIndex = fixedIndex
+        end
+    end
+    og_doMenu(self, slotIndex)
+end
 
 ISHotbar.onMouseDown = function(self, x, y)
     self.lastClickTime = getTimestampMs()
