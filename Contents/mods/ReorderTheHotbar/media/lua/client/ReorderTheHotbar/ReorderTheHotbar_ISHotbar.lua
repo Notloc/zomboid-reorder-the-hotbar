@@ -18,7 +18,7 @@ local UNLOCK_TEX = getTexture("media/ui/ReorderTheHotbar/unlocked.png")
 local FONT_HGT_SMALL = getTextManager():getFontHeight(UIFont.Small)
 
 
-local getIndexKey = function(slot)
+local getSlotKey = function(slot)
     return slot.slotType..SORT_KEY_PREFIX
 end
 
@@ -27,7 +27,7 @@ ReorderTheHotbar_Mod.getPreferredIndexes = function(player, slots)
     local preferredIndexes = {}
     for i=1, #slots do
         local slot = slots[i]
-        local index = playerModData[getIndexKey(slot)] or DEFAULT_INDEXES[slot.slotType] or i
+        local index = playerModData[getSlotKey(slot)] or DEFAULT_INDEXES[slot.slotType] or i
         preferredIndexes[slot] = index
     end
     return preferredIndexes
@@ -35,43 +35,42 @@ end
 
 ISHotbar.pre_reorder_refresh = ISHotbar.refresh
 ISHotbar.refresh = function(self)
-    self:refreshWithoutCryingAboutTheReorder()
-    self:pre_reorder_refresh()
-    self:reorderTheHotbar()
+    if NATTBackpacks and not self.skippedOneForNATT then -- I hate doing this kinda thing, but its fairly harmless as far as compatibility workarounds go
+        -- But in general, I'd rather my mods not know that other mods exist
+        self:pre_reorder_refresh()
+        self.needsRefresh = true
+        self.skippedOneForNATT = true
+    else
+        self:sortSlotsThatAreAboutToBeRemovedToTheBack()
+        self:pre_reorder_refresh()
+        self:reorderTheHotbar()
+    end
 end
 
--- Basically run refresh twice, once to handle the reorder case without bugs, and once to actually refresh the hotbar and let other mods do their thing
-ISHotbar.refreshWithoutCryingAboutTheReorder = function(self)
+ISHotbar.sortSlotsThatAreAboutToBeRemovedToTheBack = function(self)
     local refresh = false;
-
-	if not self.wornItems then
+	
+    if not self.wornItems then
 		self.wornItems = {};
 		refresh = true;
 	elseif self:compareWornItems() then
 		refresh = true;
 	end
 	
+    -- Only run if the real refresh will run
 	if not refresh then
 		return;
 	end
 
-	local previousSlot = self.availableSlot;
-	local newSlots = {};
-	local newIndex = 2;
-	local slotIndex = #self.availableSlot + 1;
+    local availableSlotTypes = {}
 
 	-- always have a back attachment
 	local slotDef = self:getSlotDef("Back");
-	newSlots[1] = {slotType = slotDef.type, name = slotDef.name, def = slotDef};
-	
-	self.replacements = {};
-	table.wipe(self.wornItems)
-	
-	-- check to add new availableSlot if we have new equipped clothing that gives some
-	-- we first do this so we keep our order in hotkeys (equipping new emplacement will make them goes on last position)
+    availableSlotTypes[slotDef.type] = true
+
 	for i=0, self.chr:getWornItems():size()-1 do
 		local item = self.chr:getWornItems():getItemByIndex(i);
-		table.insert(self.wornItems, item)
+
 		-- Skip bags in hands
 		if item and self.chr:isHandItem(item) then
 			item = nil
@@ -81,98 +80,43 @@ ISHotbar.refreshWithoutCryingAboutTheReorder = function(self)
 			for j=0, item:getAttachmentsProvided():size()-1 do
 				local slotDef = self:getSlotDef(item:getAttachmentsProvided():get(j));
 				if slotDef then
-					newSlots[newIndex] = {slotType = slotDef.type, name = slotDef.name, def = slotDef};
-					newIndex = newIndex + 1;
-					if not self:haveThisSlot(slotDef.type) then
-						self.availableSlot[slotIndex] = {slotType = slotDef.type, name = slotDef.name, def = slotDef, texture = item:getTexture()};
-						slotIndex = slotIndex + 1;
-						self:savePosition();
-					else
-						-- This sets the slot texture after loadPosition().
-						for i2,slot in pairs(self.availableSlot) do
-							if slot.slotType == slotDef.type then
-								slot.texture = item:getTexture()
-								break
-							end
-						end
-					end
-				end
-			end
-		end
-		if item and item:getAttachmentReplacement() then -- item has a replacement
-			local replacementDef = self:getSlotDefReplacement(item:getAttachmentReplacement());
-			if replacementDef then
-				for type, model in pairs(replacementDef.replacement) do
-					self.replacements[type] = model;
+					availableSlotTypes[slotDef.type] = true
 				end
 			end
 		end
 	end
 
-	-- check if we're missing slots
-	if #self.availableSlot ~= #newSlots then
-		local removed = 0;
-		if #self.availableSlot > #newSlots then
-			removed = #self.availableSlot - #newSlots;
-		end
+    local newSlots = {}
+    local newItems = {}
 
-        -- Loop backwards so we don't mess up the indexes
-        -- Fixing this loop is why I had to override the entire function -_-
-        local slotCount = #self.availableSlot
-        for i=#self.availableSlot, 1, -1 do
-            local slot = self.availableSlot[i];
-            if slot and not self:haveThisSlot(slot.slotType, newSlots) then
-				-- remove the attached item from the slot
-				if self.attachedItems[i] then
-					self:removeItem(self.attachedItems[i], false);
-					self.attachedItems[i] = nil;
-				end
+    local newIndex = 1
+    for index, slot in ipairs(self.availableSlot) do
+        if availableSlotTypes[slot.slotType] then
+            newSlots[newIndex] = slot
+            newItems[newIndex] = self.attachedItems[index]
+            if newItems[newIndex] then
+                newItems[newIndex]:setAttachedSlot(newIndex)
+            end
 
-				-- check if we had items in slots with bigger indexes and shift ALL of them
-                -- The original code failed to handle removing slots in the middle of the list
-                for j=1, slotCount-i do
-                    local correctedIndex = i + j - 1;
-                    if self.attachedItems[i + j] then
-                        self.attachedItems[correctedIndex] = self.attachedItems[i + j];
-                        self.attachedItems[correctedIndex]:setAttachedSlot(correctedIndex);
-                        self.attachedItems[i + j] = nil;
-                    end
-                end
-				self.availableSlot[i] = nil;
-			end
+            newIndex = newIndex + 1
         end
-		self:savePosition();
-	end
-	
-	newSlots = {};
-	-- now we redo our correct order
-	local currentIndex = 1;
-	for i,v in pairs(self.availableSlot) do
-		newSlots[currentIndex] = v;
-		currentIndex = currentIndex + 1;
-	end
-	
-	self.availableSlot = newSlots;
+    end
 
-    -- we re attach out items, if we added a bag for example, we need to redo the correct attachment
-	for i, item in pairs(self.attachedItems) do
-		local slot = self.availableSlot[item:getAttachedSlot()];
-		local slotDef = slot.def;
-		local slotIndex = item:getAttachedSlot();
-		self:removeItem(item, false);
-		-- we get back what model it should be on, as it can change if we remove a replacement (have a bag + something on your back, remove bag, we need to get the original attached definition)
-		if self.chr:getInventory():contains(item) and not item:isBroken() then
-			self:attachItem(item, slotDef.attachments[item:getAttachmentType()], slotIndex, self:getSlotDef(slot.slotType), false);
-		end
-	end
-	
-	local width = #self.availableSlot * self.slotWidth;
-	width = width + (#self.availableSlot - 1) * 2;
-	self:setWidth(width + 10);
+    for index, slot in ipairs(self.availableSlot) do
+        if not availableSlotTypes[slot.slotType] then
+            newSlots[newIndex] = slot
+            newItems[newIndex] = self.attachedItems[index]
+            if newItems[newIndex] then
+                newItems[newIndex]:setAttachedSlot(newIndex)
+            end
+            newIndex = newIndex + 1
+        end
+    end
 
-	self:reloadIcons();
+    self.availableSlot = newSlots
+    self.attachedItems = newItems
 
-    self.wornItems = {} -- Ensures the real call to refresh will run
+    self.wornItems = nil -- Ensures the real call to refresh will run
 end
 
 ISHotbar.reorderTheHotbar = function(self)
@@ -198,7 +142,24 @@ ISHotbar.reorderTheHotbar = function(self)
             slot.item:setAttachedSlot(i)
         end
     end
+
+    -- Save the new order
+    local modData = self.character:getModData()
+    for i=1, #self.availableSlot do
+        local slot = self.availableSlot[i]
+        modData[getSlotKey(slot)] = i
+    end
 end
+
+-- Full overriding this one because I need to remove its custom way of determining the slot index
+-- It would open the right click menu on the wrong slot because it doesn't take into account each slot's padding
+ISHotbar.onRightMouseUp = function(self, x, y)
+	local clickedSlot = self:getSlotIndexAt(x, y)
+    if clickedSlot ~= -1 then
+        self:doMenu(clickedSlot);
+    end
+end
+
 
 ISHotbar.onMouseDown = function(self, x, y)
     self.lastClickTime = getTimestampMs()
@@ -264,8 +225,9 @@ ISHotbar.onMouseUp = function(self, x, y)
             local draggedSlot = self.availableSlot[self.draggingSlotIndex]
             local droppedSlot = self.availableSlot[index]
 
-            playerModData[getIndexKey(draggedSlot)] = index
-            playerModData[getIndexKey(droppedSlot)] = self.draggingSlotIndex
+            playerModData[getSlotKey(draggedSlot)] = index
+            playerModData[getSlotKey(droppedSlot)] = self.draggingSlotIndex
+
             self.wornItems = nil
             self:refresh()
             self:savePosition()
